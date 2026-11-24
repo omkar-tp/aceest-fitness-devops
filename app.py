@@ -7,9 +7,25 @@ database required).
 """
 from __future__ import annotations
 
+import os
+
 from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
+
+# Release metadata injected at build/deploy time (Docker ARG / Kubernetes env).
+# DEPLOY_COLOR identifies the track (blue, green, stable, canary, ...), which
+# lets deployment strategies be verified from the outside.
+APP_VERSION = os.getenv("APP_VERSION", "1.1.0")
+DEPLOY_COLOR = os.getenv("DEPLOY_COLOR", "default")
+
+
+@app.after_request
+def add_release_headers(response):
+    """Expose which release served the request (used to verify rollouts)."""
+    response.headers["X-App-Version"] = APP_VERSION
+    response.headers["X-Deploy-Color"] = DEPLOY_COLOR
+    return response
 
 # In-memory store. Each workout is a dict: {"id", "workout", "duration"}.
 workouts: list[dict] = []
@@ -48,13 +64,25 @@ def _add_workout(name: str, duration: int) -> dict:
 def index():
     """Render the home page with the current list of workouts."""
     total = sum(item["duration"] for item in workouts)
-    return render_template("index.html", workouts=workouts, total=total)
+    return render_template(
+        "index.html",
+        workouts=workouts,
+        total=total,
+        version=APP_VERSION,
+        color=DEPLOY_COLOR,
+    )
 
 
 @app.route("/health")
 def health():
     """Health-check endpoint used by Docker and CI/CD pipelines."""
     return jsonify({"status": "healthy"}), 200
+
+
+@app.route("/version")
+def version():
+    """Report the running release and deployment track."""
+    return jsonify({"version": APP_VERSION, "color": DEPLOY_COLOR}), 200
 
 
 @app.route("/add_workout", methods=["POST"])
