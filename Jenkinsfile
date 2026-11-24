@@ -24,8 +24,10 @@ pipeline {
 
     parameters {
         choice(name: 'DEPLOY_STRATEGY',
-               choices: ['rolling', 'blue-green', 'canary', 'shadow', 'ab', 'none'],
-               description: 'Kubernetes deployment strategy to run after a successful build')
+               choices: ['none', 'rolling', 'blue-green', 'canary', 'shadow', 'ab'],
+               description: 'Kubernetes deployment strategy to run after a successful build (none = CI only)')
+        booleanParam(name: 'PUSH_IMAGE', defaultValue: false,
+                     description: 'Push the image to Docker Hub (needs real dockerhub-creds)')
         string(name: 'IMAGE_VERSION', defaultValue: '',
                description: 'Image tag to build/deploy (empty = git describe, e.g. v2.0.0)')
         booleanParam(name: 'PUSH_LATEST', defaultValue: false,
@@ -135,10 +137,13 @@ pipeline {
 
         stage('Push To Docker Hub') {
             when {
-                anyOf {
-                    branch 'main'
-                    buildingTag()
-                    expression { env.BRANCH_NAME == null }   // non-multibranch job
+                allOf {
+                    expression { params.PUSH_IMAGE }
+                    anyOf {
+                        branch 'main'
+                        buildingTag()
+                        expression { env.BRANCH_NAME == null }   // non-multibranch job
+                    }
                 }
             }
             steps {
