@@ -81,6 +81,38 @@ def test_get_workouts_empty(client):
     assert data["total_duration"] == 0
 
 
+def test_delete_workout(client):
+    client.post("/add_workout", json={"workout": "Squat", "duration": 20})
+    response = client.delete("/workouts/1")
+    assert response.status_code == 200
+    assert response.get_json()["workout"]["workout"] == "Squat"
+    assert client.get("/workouts").get_json()["workouts"] == []
+
+
+def test_delete_missing_workout(client):
+    response = client.delete("/workouts/99")
+    assert response.status_code == 404
+    assert "error" in response.get_json()
+
+
+def test_stats_with_data(client):
+    client.post("/add_workout", json={"workout": "Squat", "duration": 20})
+    client.post("/add_workout", json={"workout": "Run", "duration": 45})
+    data = client.get("/stats").get_json()
+    assert data == {
+        "count": 2,
+        "total_duration": 65,
+        "average_duration": 32.5,
+        "longest_duration": 45,
+    }
+
+
+def test_stats_empty(client):
+    data = client.get("/stats").get_json()
+    assert data["count"] == 0
+    assert data["average_duration"] == 0
+
+
 def test_add_workout_missing_name(client):
     response = client.post("/add_workout", json={"workout": "", "duration": 30})
     assert response.status_code == 400

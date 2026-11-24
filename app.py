@@ -16,7 +16,7 @@ app = Flask(__name__)
 # Release metadata injected at build/deploy time (Docker ARG / Kubernetes env).
 # DEPLOY_COLOR identifies the track (blue, green, stable, canary, ...), which
 # lets deployment strategies be verified from the outside.
-APP_VERSION = os.getenv("APP_VERSION", "1.1.0")
+APP_VERSION = os.getenv("APP_VERSION", "2.0.0")
 DEPLOY_COLOR = os.getenv("DEPLOY_COLOR", "default")
 
 
@@ -109,6 +109,31 @@ def get_workouts():
     """Return all recorded workouts and the total duration as JSON."""
     total = sum(item["duration"] for item in workouts)
     return jsonify({"workouts": workouts, "total_duration": total}), 200
+
+
+@app.route("/workouts/<int:workout_id>", methods=["DELETE"])
+def delete_workout(workout_id: int):
+    """Remove a workout by id (added in v2.0.0)."""
+    for index, item in enumerate(workouts):
+        if item["id"] == workout_id:
+            removed = workouts.pop(index)
+            return jsonify({"message": "Workout deleted.", "workout": removed}), 200
+    return jsonify({"error": f"Workout {workout_id} not found."}), 404
+
+
+@app.route("/stats", methods=["GET"])
+def stats():
+    """Summarise logged workouts (added in v2.0.0)."""
+    durations = [item["duration"] for item in workouts]
+    count = len(durations)
+    return jsonify(
+        {
+            "count": count,
+            "total_duration": sum(durations),
+            "average_duration": round(sum(durations) / count, 2) if count else 0,
+            "longest_duration": max(durations) if count else 0,
+        }
+    ), 200
 
 
 if __name__ == "__main__":
