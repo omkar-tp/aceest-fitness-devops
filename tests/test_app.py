@@ -21,6 +21,20 @@ def test_health_check(client):
     assert response.get_json() == {"status": "healthy"}
 
 
+def test_version_endpoint(client):
+    response = client.get("/version")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["version"] == app_module.APP_VERSION
+    assert data["color"] == app_module.DEPLOY_COLOR
+
+
+def test_release_headers_present(client):
+    response = client.get("/health")
+    assert response.headers["X-App-Version"] == app_module.APP_VERSION
+    assert response.headers["X-Deploy-Color"] == app_module.DEPLOY_COLOR
+
+
 def test_index_page_loads(client):
     response = client.get("/")
     assert response.status_code == 200
