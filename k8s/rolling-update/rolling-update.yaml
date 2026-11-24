@@ -1,0 +1,62 @@
+# Rolling update: pods are replaced gradually; maxUnavailable=0 keeps full
+# capacity during the rollout (zero downtime). Roll back with:
+#   kubectl -n aceest rollout undo deployment/aceest-rolling
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-rolling
+  namespace: aceest
+  labels:
+    app: aceest-rolling
+spec:
+  replicas: 4
+  revisionHistoryLimit: 5
+  minReadySeconds: 5
+  progressDeadlineSeconds: 300
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: aceest-rolling
+  template:
+    metadata:
+      labels:
+        app: aceest-rolling
+    spec:
+      containers:
+        - name: aceest
+          image: DOCKERHUB_USER/aceest-fitness:v1.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          env:
+            - name: DEPLOY_COLOR
+              value: rolling
+          readinessProbe:
+            httpGet: { path: /health, port: 5000 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 5000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-rolling
+  namespace: aceest
+spec:
+  type: NodePort
+  selector:
+    app: aceest-rolling
+  ports:
+    - port: 80
+      targetPort: 5000
+      nodePort: 30080

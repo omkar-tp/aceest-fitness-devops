@@ -1,0 +1,175 @@
+# A/B testing: an nginx proxy assigns each user to variant A (v1.1.0) or B
+# (v2.0.0). Assignment order: X-AB-Group request header > ab_group cookie >
+# deterministic 50/50 hash of client IP + user agent. The choice is persisted in
+# a cookie so a user keeps seeing the same variant.
+#   curl -H "X-AB-Group: b" http://<node>:30084/version
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-variant-a
+  namespace: aceest
+  labels: { app: aceest-ab, variant: a }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: aceest-ab, variant: a }
+  template:
+    metadata:
+      labels: { app: aceest-ab, variant: a }
+    spec:
+      containers:
+        - name: aceest
+          image: DOCKERHUB_USER/aceest-fitness:v1.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          env:
+            - { name: DEPLOY_COLOR, value: variant-a }
+          readinessProbe:
+            httpGet: { path: /health, port: 5000 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 25m, memory: 48Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-variant-b
+  namespace: aceest
+  labels: { app: aceest-ab, variant: b }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: aceest-ab, variant: b }
+  template:
+    metadata:
+      labels: { app: aceest-ab, variant: b }
+    spec:
+      containers:
+        - name: aceest
+          image: DOCKERHUB_USER/aceest-fitness:v2.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          env:
+            - { name: DEPLOY_COLOR, value: variant-b }
+          readinessProbe:
+            httpGet: { path: /health, port: 5000 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 25m, memory: 48Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-variant-a
+  namespace: aceest
+spec:
+  selector: { app: aceest-ab, variant: a }
+  ports:
+    - { port: 80, targetPort: 5000 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-variant-b
+  namespace: aceest
+spec:
+  selector: { app: aceest-ab, variant: b }
+  ports:
+    - { port: 80, targetPort: 5000 }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aceest-ab-proxy-conf
+  namespace: aceest
+data:
+  default.conf: |
+    upstream variant_a { server aceest-variant-a:80; }
+    upstream variant_b { server aceest-variant-b:80; }
+
+    split_clients "${remote_addr}${http_user_agent}" $auto_group {
+      50%     b;
+      *       a;
+    }
+
+    map $cookie_ab_group $cookie_or_auto {
+      default $cookie_ab_group;
+      ""      $auto_group;
+    }
+
+    map $http_x_ab_group $ab_group {
+      default $cookie_or_auto;
+      a       a;
+      b       b;
+    }
+
+    map $ab_group $ab_upstream {
+      b       variant_b;
+      default variant_a;
+    }
+
+    server {
+      listen 80;
+
+      location / {
+        add_header Set-Cookie "ab_group=$ab_group; Path=/; Max-Age=86400" always;
+        add_header X-AB-Group $ab_group always;
+        proxy_pass http://$ab_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-ab-proxy
+  namespace: aceest
+  labels: { app: aceest-ab-proxy }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: aceest-ab-proxy }
+  template:
+    metadata:
+      labels: { app: aceest-ab-proxy }
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: conf
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+          readinessProbe:
+            tcpSocket: { port: 80 }
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 64Mi }
+      volumes:
+        - name: conf
+          configMap:
+            name: aceest-ab-proxy-conf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aceest-ab-entry
+  namespace: aceest
+spec:
+  type: NodePort
+  selector: { app: aceest-ab-proxy }
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30084

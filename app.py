@@ -16,7 +16,7 @@ app = Flask(__name__)
 # Release metadata injected at build/deploy time (Docker ARG / Kubernetes env).
 # DEPLOY_COLOR identifies the track (blue, green, stable, canary, ...), which
 # lets deployment strategies be verified from the outside.
-APP_VERSION = os.getenv("APP_VERSION", "2.0.0")
+APP_VERSION = os.getenv("APP_VERSION", "2.0.1")
 DEPLOY_COLOR = os.getenv("DEPLOY_COLOR", "default")
 
 

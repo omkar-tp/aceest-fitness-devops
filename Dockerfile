@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --chown=appuser:appuser . .
 
 # Release metadata baked into the image (override with --build-arg).
-ARG APP_VERSION=2.0.0
+ARG APP_VERSION=2.0.1
 ENV APP_VERSION=${APP_VERSION} \
     DEPLOY_COLOR=default
 
