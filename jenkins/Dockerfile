@@ -25,7 +25,13 @@ RUN curl -fsSL -o /tmp/sonar.zip \
 
 USER jenkins
 
+# Skip the setup wizard; configuration comes from jenkins/casc.yaml.
+ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false" \
+    CASC_JENKINS_CONFIG=/usr/share/jenkins/ref/casc.yaml
+COPY casc.yaml /usr/share/jenkins/ref/casc.yaml
+
 # Pre-install the plugins the pipeline relies on.
 RUN jenkins-plugin-cli --plugins \
     workflow-aggregator git github junit credentials-binding \
-    sonar pipeline-stage-view timestamps
+    sonar pipeline-stage-view timestamps \
+    configuration-as-code job-dsl
