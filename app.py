@@ -27,6 +27,7 @@ def add_release_headers(response):
     response.headers["X-Deploy-Color"] = DEPLOY_COLOR
     return response
 
+
 # In-memory store. Each workout is a dict: {"id", "workout", "duration"}.
 workouts: list[dict] = []
 _next_id = 1
